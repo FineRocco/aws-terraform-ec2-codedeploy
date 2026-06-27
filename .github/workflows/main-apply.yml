@@ -68,13 +68,13 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ env.INSTANCE_ID }}" \
             --document-name "AWS-RunShellScript" \
-            --comment "Pull and run the latest Docker image" \
+            --comment "Pull and run Docker image with auto-seed" \
             --parameters 'commands=[
               "aws ecr get-login-password --region eu-west-1 | sudo docker login --username AWS --password-stdin ${{ env.ECR_URL }}",
               "sudo docker stop flask-app || true",
               "sudo docker rm flask-app || true",
               "sudo docker pull ${{ env.ECR_URL }}:latest",
-              "sudo docker run -d --name flask-app -p 80:80 -e DB_HOST=${{ env.DB_ENDPOINT }} -e DB_PASSWORD=${{ env.DB_PASS }} ${{ env.ECR_URL }}:latest"
+              "sudo docker run -d --name flask-app -p 80:80 -e DB_HOST=${{ env.DB_HOST }} -e DB_USER=postgres -e DB_NAME=postgres -e DB_PASS=$(aws secretsmanager get-secret-value --secret-id dev-postgres-credentials --query SecretString --output text --region eu-west-1) ${{ env.ECR_URL }}:latest",
               "sleep 5",
               "sudo docker exec flask-app python /app/seed_db.py"
             ]' \
