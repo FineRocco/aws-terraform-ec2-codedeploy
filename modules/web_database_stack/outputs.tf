@@ -12,3 +12,8 @@ output "ecr_repository_url" {
   description = "The URL of the ECR repository to push Docker images to"
   value       = aws_ecr_repository.app_repo.repository_url
 }
+
+output "ec2_instance_id" {
+  description = "The ID of the EC2 instance"
+  value       = aws_instance.web.id
+}

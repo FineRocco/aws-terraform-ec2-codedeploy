@@ -12,3 +12,8 @@ output "dev_web_public_ip" {
   description = "The public IP of the Dev web server"
   value       = module.dev_stack.web_public_ip
 }
+
+output "dev_ec2_instance_id" {
+  description = "The ID of the Dev EC2 instance for SSM deployment"
+  value       = module.dev_stack.ec2_instance_id
+}
