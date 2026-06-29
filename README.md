@@ -136,4 +136,53 @@ Once triggered, the CodeDeploy Agent running securely inside the EC2 DMZ takes o
    * **Container Boot:** Spins up the new Docker container bound to `80:80`, injecting the database credentials via environment variables (`-e`).
    * **Database Seeding:** Pauses for container socket binding, then executes `seed_db.py` inside the live container to truncate legacy data, generate a new cryptographically secure random password, and write it to the PostgreSQL database.
   
+---
+  
+## 📂 Repository Structure
 
+This repository strictly separates Application Code, Deployment Lifecycle Scripts, and Infrastructure as Code (IaC) to ensure a clean separation of concerns.
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       ├── main-apply.yml          # Continuous Deployment pipeline & CodeDeploy trigger
+│       └── pr-plan.yml             # CI/CD security gate: Terraform plan & PR validation
+├── app/
+│   ├── app.py                      # Flask web application & RDS Read route
+│   ├── seed_db.py                  # Auto-seeder with cryptographic password generation
+│   ├── Dockerfile                  # Python 3.11 slim container build instructions
+│   └── requirements.txt            # Python dependencies (Flask, psycopg2-binary)
+├── scripts/
+│   ├── start_container.sh          # CodeDeploy ApplicationStart hook (Pull, Auth, Run)
+│   └── stop_container.sh           # CodeDeploy ApplicationStop hook (Graceful teardown)
+├── env/
+│   ├── dev/
+│   │   ├── main.tf                 # Root module instantiation for the Development environment
+│   │   ├── provider.tf             # AWS provider declaration and region config
+│   │   ├── outputs.tf              # Catches module outputs for GitHub Actions extraction
+│   │   ├── backend.tf              # S3 remote state and DynamoDB locking configuration
+│   │   ├── terraform.tfvars        # Environment-specific values
+│   │   └── variables.tf            # Input variable definitions and expected data types
+│   └── prod/
+│       ├── main.tf                 # Root module instantiation for the Production environment
+│       ├── provider.tf             # AWS provider declaration and region config
+│       ├── outputs.tf              # Catches module outputs for GitHub Actions extraction
+│       ├── backend.tf              # S3 remote state and DynamoDB locking configuration
+│       ├── terraform.tfvars        # Production-grade values
+│       └── variables.tf            # Input variable definitions and expected data types
+├── modules/
+│   └── web_database_stack/
+│       ├── network.tf              # VPC, DMZ Subnets, Private Subnets, Route Tables
+│       ├── main.tf                 # Core infra (EC2, RDS, ECR, Secrets, CodeDeploy Agent)
+│       ├── security.tf             # IAM Roles, Policies, Instance Profiles
+│       ├── codedeploy.tf           # CodeDeploy App, Deployment Group, Artifact S3 Bucket
+│       ├── variables.tf            # Dynamic module input variables
+│       └── outputs.tf              # Module attribute pitchers to pass data upstream
+├── tf-boostrap-backend/
+│   └── main.tf                     # OIDC Identity Provider & GitHub Actions IAM Role setup
+├── appspec.yml                     # AWS CodeDeploy instruction manual and hook mapping
+├── .gitignore                      # Ignores local .terraform directories and .env files
+└── README.md                       # Master architecture document and efficiency assessment
+
+```
