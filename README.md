@@ -14,7 +14,7 @@ This project integrates five distinct technology layers to create a highly effic
 * **Containerization:** Docker
 * **Application Layer:** Python 3.11, Flask, psycopg2-binary, Bash (Lifecycle Scripts)
 
-* ---
+---
 
 ## System Architecture
 
@@ -63,7 +63,9 @@ This architecture relies on a "Pull-based" deployment lifecycle. Rather than pus
 
 ```
 
-### Network Topology & Routing
+---
+
+## Network Topology & Routing
 
 This architecture employs a strict two-tier Virtual Private Cloud (VPC) design, separating publicly accessible compute resources from highly sensitive backend data stores.
 
@@ -87,6 +89,8 @@ Security groups act as stateful, micro-segmented firewalls attached directly to 
 * **`web_sg` (The Front Door):** Attached to the EC2 instance. Explicitly allows Inbound `TCP 80` (HTTP) from `0.0.0.0/0`. **Strictly denies Port 22 (SSH)** to completely eliminate brute-force vector attacks.
 * **`db_sg` (The Vault Door):** Attached to the RDS instance. Employs a zero-trust ingress rule that allows `TCP 5432` (PostgreSQL) *only* if the traffic originates from the `web_sg` security group. It rejects all other internal VPC traffic by default.
 
+---
+
 ## Terraform State Management & Concurrency Control
 
 In a production-grade CI/CD environment, infrastructure state cannot reside locally or ephemerally on a GitHub runner. It must be centralized, encrypted, and strictly protected against concurrent execution. 
@@ -94,3 +98,42 @@ In a production-grade CI/CD environment, infrastructure state cannot reside loca
 ### The Remote Backend Bootstrap
 * **AWS S3 (State Storage):** The `terraform.tfstate` file is stored in a heavily restricted, versioned, and encrypted S3 bucket. This acts as the absolute single source of truth for the environment's configuration.
 * **Amazon DynamoDB (State Locking):** To prevent race conditions—where two developers push to `main` simultaneously and trigger parallel GitHub Actions runners—a DynamoDB table is utilized for state locking. When a pipeline initiates `terraform plan` or `apply`, it requests a lock in DynamoDB. Any concurrent pipeline runs will be rejected until the lock is released, completely eliminating the risk of state corruption.
+
+---
+
+## Key DevSecOps & OPSEC Principles
+
+1. **Zero-Knowledge Secret Injection:** The PostgreSQL master password is dynamically generated at high entropy via Terraform (`random_password`) and injected directly into **AWS Secrets Manager**. GitHub Actions never reads, caches, or echoes this password. During the AWS CodeDeploy lifecycle, the local EC2 agent uses its attached IAM Instance Profile to cryptographically pull the secret from the vault and parse it directly into container memory via `jq`.
+2. **Keyless CI/CD Authentication:** GitHub Actions authenticates against AWS utilizing **OpenID Connect (OIDC)**. Long-lived, static `AWS_ACCESS_KEY_ID` secrets do not exist anywhere in this project's repositories or environments.
+3. **Bastionless Remote Access:** Because SSH Port 22 is explicitly disabled at the Security Group level, all debugging and administrative shell access is tunneled securely through **AWS Systems Manager (SSM) Session Manager**. This completely eliminates internet-facing SSH brute-force attack vectors.
+4. **Idempotent Lifecycle Rollouts:** Deployments do not require server teardowns or mutable infrastructure drift. GitHub Actions simply drops an artifact in S3 and delegates execution to the **AWS CodeDeploy Agent**. The agent reads the `appspec.yml` file to gracefully stop legacy containers, flush orphaned images, and spin up newly compiled containers natively.
+
+---
+
+## Automated CI/CD Lifecycle
+
+When a developer merges code into the `main` branch, `.github/workflows/main-apply.yml` triggers a deterministic, zero-touch deployment pipeline. The lifecycle is strictly divided between GitHub Actions (Push) and the AWS CodeDeploy Agent (Pull).
+
+### Phase 1: Continuous Integration & Infrastructure (GitHub Actions)
+1. **OIDC Authentication:** The runner securely assumes the `GitHubActionsRole` in AWS via OpenID Connect.
+2. **Infrastructure IaC Gate:** Terraform initializes the remote S3 backend, acquires the DynamoDB state lock, and applies infrastructure changes (`-auto-approve`).
+3. **Variable Extraction:** The pipeline uses `terraform output -raw` to dynamically scrape the newly generated ECR Repository URL, RDS Endpoint, and CodeDeploy S3 Bucket name from the infrastructure state.
+4. **Artifact Compilation:** The lightweight `python:3.11-slim` Docker image is built and pushed to Amazon ECR.
+5. **The Ephemeral Bridge:** GitHub Actions dynamically writes a `.env` file containing the Terraform-generated database endpoints and ECR URLs. 
+6. **Artifact Packaging:** The `.env` file, Bash lifecycle scripts, and `appspec.yml` are zipped and uploaded to the S3 CodeDeploy bucket. GitHub Actions triggers the deployment and awaits a callback.
+
+### Phase 2: Continuous Deployment & Rollout (AWS CodeDeploy)
+Once triggered, the CodeDeploy Agent running securely inside the EC2 DMZ takes over execution based on the `appspec.yml` lifecycle hooks:
+
+1. **`ApplicationStop` Hook:**
+   * Executes `scripts/stop_container.sh`.
+   * Gracefully stops and removes the legacy `flask-app` container if it exists, ensuring an idempotent deployment environment.
+2. **`ApplicationStart` Hook:**
+   * Executes `scripts/start_container.sh`.
+   * **Sources Context:** Loads the dynamically generated `.env` file to locate the database and ECR endpoints.
+   * **Authenticates:** Uses the EC2 IAM Instance Profile to authenticate the local Docker daemon against AWS ECR.
+   * **Zero-Knowledge Extraction:** Quietly queries AWS Secrets Manager, utilizing `jq` to parse the raw JSON payload and extract the master database password without echoing it to any log files.
+   * **Container Boot:** Spins up the new Docker container bound to `80:80`, injecting the database credentials via environment variables (`-e`).
+   * **Database Seeding:** Pauses for container socket binding, then executes `seed_db.py` inside the live container to truncate legacy data, generate a new cryptographically secure random password, and write it to the PostgreSQL database.
+  
+
