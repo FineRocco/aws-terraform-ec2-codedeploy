@@ -138,7 +138,7 @@ Once triggered, the CodeDeploy Agent running securely inside the EC2 DMZ takes o
   
 ---
   
-## 📂 Repository Structure
+## Repository Structure
 
 This repository strictly separates Application Code, Deployment Lifecycle Scripts, and Infrastructure as Code (IaC) to ensure a clean separation of concerns.
 
