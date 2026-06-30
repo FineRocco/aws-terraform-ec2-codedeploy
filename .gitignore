@@ -1,4 +1,4 @@
-# Terraform
+
 **/.terraform/*
 *.tfstate
 *.tfstate.*
@@ -9,8 +9,8 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+*.lock.*
 
-# Python
 __pycache__/
 *.py[cod]
 *$py.class

@@ -26,7 +26,6 @@ resource "aws_iam_role" "github_actions_role" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            # STRICT SECURITY: Only allow YOUR specific repo to assume this role!
             "token.actions.githubusercontent.com:sub" = "repo:FineRocco/aws-terraform:*"
           }
         }
@@ -35,15 +34,11 @@ resource "aws_iam_role" "github_actions_role" {
   })
 }
 
-# 3. Attach Administrator permissions so GitHub Actions can build your infrastructure
-# Note: In a true enterprise prod environment, we would scope this down further, 
-# but Admin is standard for a CI/CD role deploying core networking/compute.
 resource "aws_iam_role_policy_attachment" "github_actions_admin" {
   role       = aws_iam_role.github_actions_role.name
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
-# 4. Output the exact ARN so you can copy-paste it into your GitHub YAML
 output "github_actions_role_arn" {
   value       = aws_iam_role.github_actions_role.arn
   description = "Copy this ARN into your pr-plan.yml file"
