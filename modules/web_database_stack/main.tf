@@ -21,6 +21,7 @@ resource "aws_secretsmanager_secret_version" "db_secret_version" {
 resource "aws_ecr_repository" "app_repo" {
   name                 = "${var.environment}-flask-app"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
